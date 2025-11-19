@@ -1,0 +1,15 @@
+pywin32>=306
+Pillow>=10.0.0
+opencv-python>=4.8.0
+easyocr>=1.7.0
+customtkinter>=5.2.0
+pyautogui>=0.9.54
+keyboard>=0.13.5
+pynput>=1.8.1
+
+# # Install Chocolatey first (if not installed)
+# # Run PowerShell as Administrator and paste:
+# Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+# # Then install Tesseract
+# choco install tesseract

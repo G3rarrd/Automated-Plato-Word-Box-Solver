@@ -4,9 +4,9 @@ import re
 from functools import partial
 
 
-
 class Grid(ctk.CTkFrame):
     def __init__(self, master, app, **kwargs):
+        """Interactive grid component for displaying and editing letter matrices."""
         super().__init__(master, **kwargs)
         self.img_process = app.controller.img_process
         self.color =  app.color
@@ -25,12 +25,12 @@ class Grid(ctk.CTkFrame):
         
         self.empty_entries : set[ctk.CTkEntry]= set()
         
-        
         self._apply_styles()
         self.create_grid_frame()
         
         
     def _apply_styles(self):
+        """Grid UI stylings"""
         CELL_BORDER_WIDTH : int = 2
         CELL_CORNER_RADIUS : int = 0
         
@@ -81,6 +81,10 @@ class Grid(ctk.CTkFrame):
         }
     
     def create_grid_frame(self) -> None:
+        """
+        Method handles the creation of the grid on the left frame.
+        Follows a responsive design
+        """
         margin : int = 100
         pad : int = 50
         
@@ -88,37 +92,45 @@ class Grid(ctk.CTkFrame):
         self.empty_entries.clear()
         
         def stay_square(event) -> None:
+            """Maintains square aspect ratio for grid frame during window resize"""
             size: int = min(event.width, event.height) 
             self.frame.place_configure(relx=0.5, rely=0.5, anchor="center", width=(size-margin), height=(size-margin))
             self.inner_frame.place_configure(relx=0.5, rely=0.5, anchor="center", width=(size-margin - pad), height=(size-margin - pad))
         
+        # Create outer content frame
         self.frame = ctk.CTkFrame(
             self.master,
             **self.grid_frame_styles,        
         )
         
+        # Create inner content frame
         self.inner_frame = ctk.CTkFrame(
             self.frame,
             **self.grid_inner_frame_styles
         )
-        
+
+        # Create status label
         self.inner_frame_label = ctk.CTkLabel(
             master=self.inner_frame,
             **self.grid_inner_frame_label,
             text=self.inner_frame_text
         )
         
+        # Initial placement and sizing
         size = min(self.master.winfo_width(), self.master.winfo_height()) 
         
         self.frame.place_configure(relx=0.5, rely=0.5, anchor="center", width=(size-margin), height=(size-margin))
         self.inner_frame.place_configure(relx=0.5, rely=0.5, anchor="center", width=(size-margin- pad), height=(size-margin- pad))
         self.inner_frame_label.place(relx=0.5, rely=0.5, anchor="center")
         
+        # Bind resize event for responsive behavior
         self.master.bind("<Configure>", stay_square)
         
         self.configure_solve_btn()
 
     def fill_grid(self) -> None:
+        """Populates the grid ui with the letters discovered from OCR processing"""
+        # Highlight the current cell clicked and unhighlight the others
         def on_focus_in(entry) :
             entry.configure(**self.cell_styles_focus_in)
             
@@ -126,14 +138,16 @@ class Grid(ctk.CTkFrame):
             entry.configure(**self.cell_styles_focus_out)
         
         def on_entry_change(entry, var, *args) -> None:
+            """Validates and formats cell input in real-time"""
             val = var.get()
-            val = val[:2]
-            val = re.sub('[^A-Za-z]', '', val)
+            val = val[:2] # Limit to 2 characters
+            val = re.sub('[^A-Za-z]', '', val) # Remove non-alphabetic characters
             val = val.capitalize()
 
             if (var.get()!= val):
                 var.set(val)
             
+            # Empty cells visuals
             if (val == "") :
                 self.empty_entries.add(entry)
                 entry.configure(fg_color=self.color.error_container)
@@ -144,6 +158,7 @@ class Grid(ctk.CTkFrame):
                 
             self.configure_solve_btn()
 
+        # Get grid dimensions from OCR results
         self.grid_row_size = len(self.img_process.contour_info_grid)
         self.grid_col_size = len(self.img_process.contour_info_grid[0]) if self.grid_row_size > 0 else 0
 
@@ -202,9 +217,11 @@ class Grid(ctk.CTkFrame):
         return [[cell.get().lower() for cell in row ]for row  in self.cells]
     
     def set_inner_frame_text(self, text : str) -> None:
+        """Text in the grid"""
         self.inner_frame_text = text
         
     def set_grid_row_col_size(self, row_size : int, col_size : int) -> None:
+        """Initialize the grid's column size or row size"""
         self.grid_row_size = row_size
         self.grid_col_size = col_size
         

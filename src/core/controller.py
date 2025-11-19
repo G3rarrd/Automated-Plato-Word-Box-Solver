@@ -1,18 +1,21 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, List
 import threading
-from word_box_solver_algo import WordBoxSolver
-from img_processing import ImgProcessing
+from core.word_box_solver_algo import WordBoxSolver
+from core.word_box_solver_img_processing import ImgProcessing
 from random import uniform
 import time
 import pyautogui
 from pynput import keyboard
 
-if TYPE_CHECKING:
-    from word_box_solver_app import App
+
+
 class AppController:
-    def __init__(self, app : App) -> None:
-        self.app : App = app
+    def __init__(self, app) -> None:
+        """
+        Controls the solving process of the app by using the results 
+        of the image processing and the algorithm results 
+        """
+        self.app = app
         self.img_process : ImgProcessing = ImgProcessing(self.app)
         self.solver : WordBoxSolver = WordBoxSolver()
         
@@ -31,19 +34,25 @@ class AppController:
             
         
         def destroy_grid():
+            """Destroys the current grid and remakes it with updated content"""
             if not grid or not grid.frame:
                 print("Grid Not Found")
                 return
             
-            grid.frame.destroy()
+            # Removes the grid and display the text on it
+            grid.frame.destroy() 
             grid.set_inner_frame_text(text=text_2)
             
-            setting_content.disable_set_game_btn()
+            # Prevents the 
+            setting_content.disable_scan_window_btn()
             
             grid.create_grid_frame()
             
             
         def task():
+            """"
+            Background task that processes the game screenshot and extracts letters.
+            """
             self.app.after(0, destroy_grid)
             
             self.img_process.pipeline()
@@ -53,7 +62,8 @@ class AppController:
             self.app.after(0, update_ui)
         
         def update_ui():
-            setting_content.enable_set_game_btn()
+            """ Populates the empty grid with letters if a valid grid is detected"""
+            setting_content.enable_scan_window_btn()
             
             if not grid or not grid.frame or not grid.inner_frame:
                 print("Grid Not Found")
@@ -76,16 +86,20 @@ class AppController:
             
         threading.Thread(target=task).start()
         
-    # The automate function is in a thread
+
     def automate(self):
+        """ Automation method for the mouse drags """
         setting_content = self.app.setting_content
         
         def on_press(key):
+            """ Changes the state of the solving process based off the key pressed"""
             try:
+                # Stop the solving process entirely 
                 if key == keyboard.Key.esc:
                     self.app.is_solving = False
                     return False
                 
+                # Pauses the solving process on the last word found
                 if key == keyboard.Key.space:
                     self.app.is_paused ^= True
                     if (self.app.is_paused):
@@ -99,10 +113,11 @@ class AppController:
         listener  = keyboard.Listener(on_press=on_press)
         listener.start()
         
-        self.app.is_solving = True
+        self.app.is_solving = True # State of the solving process
         
-
+        # Sort the longest words from begining to the end
         sorted_items = sorted(self.solver.found_words.items(), key=lambda x: len(x[0][0]), reverse=True)
+        
         for (_, _), path in sorted_items:
             if not self.app.is_solving:
                 self.app.is_paused = False
@@ -113,9 +128,11 @@ class AppController:
             
             pos_x, pos_y = position
             
+            # Mouse positioning
             pyautogui.moveTo(self.img_process.window_left + pos_x, self.img_process.window_top + pos_y)
             pyautogui.mouseDown(button="left")
             
+            # Mouse drag along the word path
             for i in range(1, len(path)):
                 y, x = path[i][0], path[i][1]
                 position = self.solver.cell_window_positions[y][x]
@@ -129,27 +146,38 @@ class AppController:
                     
                 pyautogui.moveTo(mov_x, mov_y, uniform(0, 1.0 - speed))
             
+            # Mouse release
             pyautogui.mouseUp(button='left')
             
+            # Pause at a steady pace 
             while (self.app.is_paused and self.app.is_solving):
                 time.sleep(0.1)
-                
+        
+        # Reinitiate solving state after automation
         self.app.is_solving = False
         self.app.is_paused = False
 
 
     def solve_game(self) -> None:
+        """    
+        Initiates the word-solving process by extracting letters, finding solutions,
+        and automating mouse gestures to input words.
+        
+        Runs in background thread to prevent UI freezing.
+        """
         setting_content = self.app.setting_content
         grid = self.app.grid
         if not grid or not grid.frame or not setting_content :
             return
 
         def after_solving():
+            """Clear the top label and activate the buttons after solving"""
             self.app.state_label.destroy()
             setting_content.enable_solve_btn()
-            setting_content.enable_set_game_btn()
+            setting_content.enable_scan_window_btn()
             
         def task():
+            """Tasks to be done after the solve button is clicked"""
             letter_grid = grid.extract_letters() # Extract the letter from the entry
             
             if (not grid.is_valid()) :
@@ -165,20 +193,21 @@ class AppController:
                 print("Window Screen not found")
                 return
             
+            # Add the solving state label at the top of the window
             self.app.after(0, self.app.create_state_label(row=0, col=0))
+
+            # Disable the solve button and initialize its state
             self.app.after(0, self.app.setting_content.disable_solve_btn())
             
             # Bring the screen to the front and get the left and top positions of the window client rect
             self.solver.set_screen_front(hwnd)
             
+            # Disable the scan window button also
+            setting_content.disable_scan_window_btn()
             
-            setting_content.disable_set_game_btn()
+            self.automate() # Start the automation
             
-            self.automate()
-            
-            self.app.after(0, after_solving())
-            
-            
-            # print("Done")
+            self.app.after(0, after_solving()) # call the function after the auotmation has ended
 
+        # Add the tasks to thread
         threading.Thread(target=task).start()
