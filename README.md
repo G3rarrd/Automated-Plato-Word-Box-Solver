@@ -1,13 +1,13 @@
 # 🧩 Plato Word Box Solver
 This project is an automated OCR solution for solving the Word Box mini-game in the Plato Android app. It captures the window containing the game, extracts letter grid using computer-vision techniques, and converts the letters into text through OCR. The program then finds all possible word combinations, and automates the gameplay using mouse movements.
 ## Demo
-![[Word-Box Solver Demo.mp4]]
+![demo](https://github.com/G3rarrd/Automated-Plato-Word-Box-Solver/blob/main/README_assets/Word-Box%20Solver%20Demo.mp4)
 ## Table of Contents 
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Getting Started](#getting-started)
 - [Usage](#usage)
-- [Project Structure](#project-strcuture)
+- [Project Structure](#project-structure)
 - [How It Works](#how-it-works)
 - [Limitations](#limitations)
 - [Future Directions](#future-directions)
@@ -130,9 +130,9 @@ src/
 
 ## Limitations
 - Unable to reliably detect some letters (most especially I and J). in some instances
-	![[vlcsnap-2025-11-19-07h34m23s778.png]]
-	![[vlcsnap-2025-11-19-07h36m17s114.png]]
-	![[vlcsnap-2025-11-19-07h35m47s415.png]]
+	![error_1](https://github.com/G3rarrd/Automated-Plato-Word-Box-Solver/blob/main/README_assets/incomplete_grid_1.png)
+	![error_2](https://github.com/G3rarrd/Automated-Plato-Word-Box-Solver/blob/main/README_assets/incomplete_grid_2.png)
+	![error_3](https://github.com/G3rarrd/Automated-Plato-Word-Box-Solver/blob/main/README_assets/incomplete_grid_3.png)
 
 - **Platform Constraints**: Currently Windows-only due to screen capture dependencies
 - Limited to the English word dictionary only
