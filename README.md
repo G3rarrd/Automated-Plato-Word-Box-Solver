@@ -1,7 +1,7 @@
 # 🧩 Plato Word Box Solver
 This project is an automated OCR solution for solving the Word Box mini-game in the Plato Android app. It captures the window containing the game, extracts letter grid using computer-vision techniques, and converts the letters into text through OCR. The program then finds all possible word combinations, and automates the gameplay using mouse movements.
 ## Demo
-![demo](https://github.com/G3rarrd/Automated-Plato-Word-Box-Solver/blob/main/README_assets/Word-Box%20Solver%20Demo.mp4)
+![demo](https://github.com/G3rarrd/Automated-Plato-Word-Box-Solver/blob/main/README_assets/Word-Box_Solver_Demo.gif)
 ## Table of Contents 
 - [Features](#features)
 - [Tech Stack](#tech-stack)
