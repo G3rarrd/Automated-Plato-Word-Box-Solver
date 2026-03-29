@@ -1,16 +1,23 @@
 from pathlib import Path
+import random
 from typing import List
-import re
+
+# Window API
 import win32gui
 import win32ui
 import win32con
 
-import math
-from easyocr import Reader
-from torch import cuda
+# Deep Learning
+from ml.letter_classifier import LetterClassifier
+import torch
 
+# Image Handlers
 from PIL import Image
+import numpy as np
 import cv2
+
+# Utils
+import math
 
 
 class ImgProcessing:
@@ -22,7 +29,8 @@ class ImgProcessing:
             app: Main application instance for accessing shared state and controllers
         """
         self.app = app
-        self.reader : Reader = Reader(['en'], gpu=cuda.is_available()) # Initialize English OCR reader and uses gpu if available
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.classifier : LetterClassifier = LetterClassifier(self.device)
         self.contour_info_grid: list = []
         
         self.window_left : int= 0
@@ -34,6 +42,7 @@ class ImgProcessing:
 
         screenshot_dir: Path = Path("screenshots")
         self.image_path : Path = screenshot_dir / "wordbox.png" 
+        self.DEBUG = False
 
     def set_window_position(self, hwnd : int) -> None:
         """
@@ -100,71 +109,174 @@ class ImgProcessing:
 
         image.save(self.image_path)    
 
-
-    def easyOCRres(self, contour) -> tuple[str, float]:
+    def _get_letter_text(self, letter_img) -> tuple[str, float]:
         """ 
-        Easy OCR determines wether the contour is a text or not and 
-        returns the final text (if any) and its confidence value 
+
         """
+        debug = False
+        letter_img_copy = letter_img.copy()
+        letter_img_inv =cv2.bitwise_not(letter_img_copy)
 
-        #  EasyOCR character whitelist for letter recognition
-        results = self.reader.readtext(contour, allowlist="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz|0'")        
-        finalText = ""
-        finalProb = 0
-        count = 1e-10
-        for (bbox, text, prob) in results:
-            finalText += text
-            finalProb += prob
-            count += 1
-            
-        if (finalText == "0") :
-            finalText ="o"
+        contours, _= cv2.findContours(letter_img_inv, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # debug contours
+        if debug:
+            letter_img_inv_copy = cv2.cvtColor(letter_img_inv , cv2.COLOR_GRAY2BGR)
+            cv2.drawContours(letter_img_inv_copy, contours, -1, (255, 0, 0), 2)
+            cv2.imshow(f"letter contours {random.randint(1, 1000000)}", letter_img_inv_copy)
+
+        letter_img_rgb = cv2.cvtColor(letter_img, cv2.COLOR_GRAY2RGB) # So it can be read by the deep learning model
+        if len(contours) > 1:
+            contours = contours[::-1] # contours are placed right to left
+            characters = ""
+            total_confidence = 0.0
+            for idx, cont in enumerate(contours):
+                letter_image,_ = self._create_letter_square_img(letter_img_rgb, cont, 1) # shape (W,H,3)
+                
+                if debug:
+                    cv2.imshow(f"{cont}",letter_image)
+
+                char, conf = self.classifier.read_letter(letter_image)
+                
+                if char == "l" and idx == 0:
+                    char = "I"
+                characters += char
+                total_confidence += conf
+
+            mean_confidence = round(total_confidence / len(characters), 2)
+            return characters, mean_confidence
         
-        return (finalText, round(finalProb/count, 2))
+        character, confidence = self.classifier.read_letter(letter_img_rgb)
+        return character, round(confidence, 2)
+
+    def _get_grid_img(self):
+        """
+        Dilate and extract the bounding area of the letter grid.
+        """
+        debug = False
+        img = self.img.copy()
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+
+        thresh = cv2.threshold(blurred, 180,255, cv2.THRESH_BINARY)[1] # binary thresholding 
+        
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (8,3))
+        
+        dilate = cv2.dilate(thresh, kernel, iterations=2) # combines the threshold blobs closest to each otheer to form one blob
+
+        # Finding the contours of the image and assigning them to a list
+        [contours, hierarchies] = cv2.findContours(dilate, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        padding = 5
+        
+        if not contours:
+            return None
+        
+        largest_contour = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(largest_contour)
+
+        H, W = self.img.shape[:2]
+        x1 = max(x - padding, 0)
+        y1 = max(y - padding, 0)
+        x2 = min(x + w + padding, W)
+        y2 = min(y + h + padding, H)
+
+        mask = np.zeros(self.img.shape[:2], dtype=np.uint8)
+
+        # Draw the contour filled (white = keep)
+        cv2.rectangle(mask, (x, y), (x + w, y + h), 255, -1)
+
+        # Apply mask
+        grid_img = self.img.copy()
+        grid_img[mask == 0] = 255
+
+        if debug:
+            img_copy = self.img.copy()
+            cv2.rectangle(img_copy , (x1, y1), (x2, y2), (255, 0, 0), 2)
+            cv2.imshow("Largest Contour Crop", img_copy)
+
+            dilate_copy = cv2.cvtColor(dilate, cv2.COLOR_GRAY2BGR)
+            cv2.rectangle(dilate_copy, (x1, y1), (x2, y2), (255, 0, 0), 2)
+            cv2.imshow("Threshold", dilate_copy)
+            
+        return grid_img
 
 
-    def _letter_contours(self) -> None:
+    def _get_letter_contours(self) -> None:
         """
         Detects and stores bounding rectangles around potential letter-shaped contours
         in the current image (`self.img`).
         
         """
+        grid_img = self._get_grid_img()
 
-        # if not self.img or len(self.img.shape) < 1:
-        #     return
-        
-        h,w = self.img.shape[:2]
-
-        # Block the player avatars at the top of the screen
-        ignoreBoxTop = (0, 0, w, int(h * 0.2)) 
-        x1, y1, x2, y2 = ignoreBoxTop
-        cv2.rectangle(self.img, (x1, y1), (x2, y2), color=(255, 255, 255), thickness=-1)  
-        
         # Preparing the image for processing
-        gray = cv2.cvtColor(self.img, cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(grid_img, cv2.COLOR_BGR2GRAY)
         
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
-        thresh = cv2.threshold( blurred, 150,255, cv2.THRESH_BINARY_INV)[1]
+        thresh = cv2.threshold( blurred, 150,255, cv2.THRESH_BINARY_INV)[1] # binary threshold inverse
         
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (8,3))
         
-        dilate = cv2.dilate(thresh, kernel, iterations=2) # helps to combine the two letters to form on contour 
+        dilate = cv2.dilate(thresh, kernel, iterations=2) # helps to combine the two letters to form one contour 
         
         # Finding the contours of the image and assigning them to a list
-        [contours, hierarchies] = cv2.findContours(dilate, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        
-        self.contourRects = []
-        for i in range(len(contours)):
-            x, y, w, h = cv2.boundingRect(contours[i])
-            self.contourRects.append((x, y, w, h))
+        contours, _ = cv2.findContours(dilate, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
+        return contours, grid_img
+
+    
+    def _create_letter_square_img(self, img, contour, pad):
+        """
+        Extracts a contour region, pads it with white background,
+        and returns the padded image + bbox inside that image.
+
+        Args:
+            contour: detected contour
+            pad: padding (pixels)
+
+        Returns:
+            padded_img: square image with white padding
+            bbox: (x1, y1, x2, y2) of original content inside padded image
+        """
+
+        x,y,w,h = cv2.boundingRect(contour)
+
+        crop = img[y:y+h, x:x+w]
+
+        size = max(w, h) + 2 * pad # offset is why 2 is multiplied by pad
+
+        padded_img = np.ones((size, size, 3), dtype=np.uint8) * 255
+
+        x_offset = (size - w) // 2
+        y_offset = (size - h) // 2
+
+        padded_img[y_offset:y_offset+h, x_offset:x_offset+w] = crop
+
+        # x1 = x_offset
+        # y1 = y_offset
+        # x2 = x_offset + w
+        # y2 = y_offset + h
+
+        return padded_img, (x, y, w, h)
+    
+    def _preprocess_letter_img(self, letter_img):
+            """
+            Preprocesses individual letter images for OCR.
             
+            Args:
+                cropped_img: Cropped image region containing a potential letter
+                
+            Returns:
+                Preprocessed binary image ready for OCR
+            """
 
-            
-        self.contourRects.sort(key=lambda b : b[1]) # Sort the contours according to the y values
+            gray = cv2.cvtColor(letter_img, cv2.COLOR_BGR2GRAY)
+            _,thresh = cv2.threshold(gray, 140, 255, cv2.THRESH_BINARY)
 
+            return thresh
+    
     def _img_to_text(self):
         """
         Converts found letter contours to text using OCR.
@@ -178,84 +290,38 @@ class ImgProcessing:
         
         The method populates self.lettersInfo with tuples of (center_x, center_y, recognized_text).
         """
-
-        def preprocessContourRect(cropped_img):
-            """
-            Preprocesses individual letter images for OCR.
-            
-            Steps:
-            - Convert to grayscale
-            - Apply Gaussian blur for noise reduction
-            - Threshold to binary image
-            - Apply erosion to clarify certain letters such as I and O
-            
-            Args:
-                cropped_img: Cropped image region containing a potential letter
-                
-            Returns:
-                Preprocessed binary image ready for OCR
-            """
-            gray = cv2.cvtColor(cropped_img, cv2.COLOR_BGR2GRAY)
-
-            blur = cv2.GaussianBlur(gray, (5,5), 0)
-            _,thresh = cv2.threshold(blur, 140, 255, cv2.THRESH_BINARY)
-
-            # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 1))
-            # erosion = cv2.dilate(thresh, kernel=kernel, iterations=1) # erodes the letter image (yes shows dilation but it is doing the opposite)
-            # cv2.imshow(f'{rect}', dilate)
-            return thresh
-        
-        padding = 10
-        # if not self.img or len(self.img.shape) < 1:
-        #     return
-        
-        _, imgW = self.img.shape[:2]
-        
-        self.lettersInfo  = []
-        for rect in self.contourRects :
-            x,y,w,h = rect
-            
-            # Skip contours that span almost the entire image width (likely not letters)
-            if (w >= 0.9*imgW): continue
-            
-            # Expand the bounding box with padding
-            x1, y1 = x , y
-            x2, y2 = x + w, y + h 
-
-            # Width and height of the expanded box
-            w = x2 - x1
-            h = y2 - y1
-
-            # Calculate center of the contour
-            cx = x + (w // 2)
-            cy = y + (h // 2)
-
-            # Create square bounding box centered on the contour for better image recognition
-            max_width = max(w, h)
-            x1 = cx - (max_width // 2) - padding
-            x2 = cx + (max_width // 2) + padding
-            y1 = cy - (max_width // 2) - padding
-            y2 = cy + (max_width // 2) + padding
-            
+        debug = False
+        self.lettersInfo = []
+        letter_contours, grid_img = self._get_letter_contours()
+        for l_con in letter_contours:
             # Extract and preprocess the letter region
-            crop  = self.img[y1 : y2, x1 : x2]
-            preprocess = preprocessContourRect(crop)
-            resized = cv2.resize(preprocess, None, fx=2.5, fy=2.5, interpolation=cv2.INTER_LINEAR)
+            letter_img, l_bbox = self._create_letter_square_img(grid_img, l_con, 5)
             
-            # OCR with tesseract first
-            # text,conf =  self.pytesseractRes(resized)
-            # if (text == "" or conf < 0.4) :
-            text,conf =self.easyOCRres(resized) # Fallback to EasyOCR
+            preprocess_letter_img = self._preprocess_letter_img(letter_img)
+            # cv2.drawContours(preprocess_letter_img_copy, contours, -1, (255, 0, 0), 2)
+            
+            text,conf = self._get_letter_text(preprocess_letter_img)
 
-            text = re.sub(r"\s+", "", text) # Clean the found text
-            
+            if text == "l":
+                text = "I"
+
+            # get bbox center
+            cx = l_bbox[0] + l_bbox[2] // 2
+            cy = l_bbox[1] + l_bbox[3] // 2
+
             # Store letter information for grid placement
             info = (cx, cy, text)
             self.lettersInfo.append(info)
-            
-            # cv2.imshow(f"{rect}", resized)
-            # cv2.putText(self.img, f"{text}, {conf}", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1, (200, 200, 200), 2)
-        
+
+            # Debug
+            img_copy = self.img
+
+            if debug:
+                cv2.putText(img_copy, f"{text}, {conf}", (l_bbox[0], l_bbox[1] + 5),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
+                
+                cv2.imshow("Letters identified",img_copy)
+                
     
     def _convert_to_letter_grid(self):
         """ 
@@ -269,8 +335,8 @@ class ImgProcessing:
         if (root * root != n or n < 2): 
             self.contour_info_grid = []
             return
-        
-        self.contour_info_grid = [sorted(self.lettersInfo[i : i + root], key=lambda x : x[0]) for i in range(0, n, root)]
+        self.lettersInfo.sort(key=lambda item: item[1]) 
+        self.contour_info_grid = [sorted(self.lettersInfo[i : i + root], key=lambda x : x[0]) for i in range(0, n, root)] # sort by column
         
     
     def pipeline(self) -> None:
@@ -294,14 +360,14 @@ class ImgProcessing:
         # Step 2: Load captured image 
         
         self.img = cv2.imread(self.image_path)
-                
-        # Step 3: Detect and extract letter contours from image
-        self._letter_contours()
         
-        # Step 4: Perform OCR to convert image regions to text
+        # Step 3: Perform OCR to convert image regions to text
         self._img_to_text()
+
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
         
-        # Step 5: Organize detected letters into grid structure
+        # Step 4: Organize detected letters into grid structure
         self._convert_to_letter_grid()
 
         # Reset scanning flag now that processing is complete
