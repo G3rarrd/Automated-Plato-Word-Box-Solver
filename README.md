@@ -1,10 +1,23 @@
-# 🧩 Plato Word Box Solver
+# 🧩 Plato Word Box Solver v1.1.0
 This project is an automated OCR solution for solving the Word Box mini-game in the Plato Android app. It captures the window containing the game, extracts letter grid using computer-vision techniques, and converts the letters into text through OCR. The program then finds all possible word combinations, and automates the gameplay using mouse movements.
+
+
 ## Demo
 ### Old
 ![demo](https://github.com/G3rarrd/Automated-Plato-Word-Box-Solver/blob/main/README_assets/Word-Box_Solver_Demo.gif)
 ### New 
 ![demo](https://github.com/G3rarrd/Automated-Plato-Word-Box-Solver/blob/main/README_assets/word_box_solver_demo_5x5_grid_edit_1.gif)
+
+## New Features
+- Replaced EasyOCR with a custom-CNN model trained and validated on a cleaned char74k dataset for letter detection
+- Significantly improved recognition accuracy, especially for difficult characters like **'I'** and **'J'**
+
+### Performance Improvements
+- Letter classification is now **significantly faster** than the previous EasyOCR-based method
+
+### Bug Fixes
+- Fixed incorrect detection of visually similar characters (e.g., I/J confusion)
+
 ## Table of Contents 
 - [Features](#features)
 - [Tech Stack](#tech-stack)
@@ -17,7 +30,7 @@ This project is an automated OCR solution for solving the Word Box mini-game in 
 - [Contributing](#contributing)
 
 ## Features
-- **OCR Processing:** Automatic letter extraction using EasyOCR
+- **OCR Processing:** Automatic letter extraction using custom CNN model for faster, more accurate letter recognition
 - **Automated Gameplay:** Mouse movement automation based on word path
 - **Up-to-date GUI:** Minimal, responsive interface built with CustomTKinter
 - **Control Options:** Pause/resume, stop, and automation speed control functionality
@@ -31,8 +44,10 @@ This project is an automated OCR solution for solving the Word Box mini-game in 
 
 ### Computer Vision & OCR
 - [OpenCV](https://opencv.org/): Image processing, contour detection, and preprocessing for recognition
-- **[EasyOCR](https://github.com/JaidedAI/EasyOCR)**: OCR engine using deep learning heuristics 
 - **[Pillow (PIL)](https://python-pillow.org/)** - Image manipulation and format handling
+- Custom CNN model: Convolutional Neural Network trained on a cleaned Char74K dataset for letter classification
+  ![Custom CNN Architecture](README_assets/custom_cnn_architecture.png)  
+  [Reference Paper](https://iopscience.iop.org/article/10.1088/1757-899X/1125/1/012049/pdf)
 
 ### Automation & System Integration
 - **[pywin32](https://github.com/mhammond/pywin32)** - Windows API integration for screen capture
@@ -43,6 +58,7 @@ This project is an automated OCR solution for solving the Word Box mini-game in 
 - **Trie (Prefix Tree)** - Efficient storage of and recuse of over [~460k English words](https://github.com/dwyl/english-words) 
 - **DFS (Depth-First Search)** - 8-directional grid traversal to find words
 - **Backtracking** - Grid traversal with state management to prevent re-traversals
+
 
 ### Core Python Libraries
 - **threading**: Allows for background task execution, thus preventing application freezes
@@ -120,31 +136,28 @@ src/
 2. **OCR Processing**:
 	- Preprocesses image (grayscale, binary thresholding, gaussian blur(noise removal), image dilation to find singular contours of multi/singular-characters text)
 	- Detects individual letter cells using contour analysis
-	- Converts images to text using EasyOCR
+	- Classifies letters using a **custom-trained CNN**, achieving high accuracy, including tricky letters like **'I'** (represented as l but easily converted to I) and **'J'**, and significantly faster than the previous EasyOCR approach.
 3. **Word Search**:
 	- Builds Trie from 460k+ word dictionary
 	- Performs DFS with backtracking across 8 directions
 	- Validates words against Trie dictionary
 4. **Automation**:
-	- Positions the mouse based on the position of the screen recording or emulator
-	- Applies mouse movements and clicks according to the path found in the word search phase
+	- Determines mouse positions relative to the captured game grid.  
+	- Applies mouse movements and clicks along the paths corresponding to the found words during the word search phase.
 
 [back to top](#table-of-contents)
 
 ## Limitations
-- Unable to reliably detect some letters (most especially I and J). in some instances
-	![error_1](https://github.com/G3rarrd/Automated-Plato-Word-Box-Solver/blob/main/README_assets/incomplete_grid_1.png)
-	![error_2](https://github.com/G3rarrd/Automated-Plato-Word-Box-Solver/blob/main/README_assets/incomplete_grid_2.png)
-	![error_3](https://github.com/G3rarrd/Automated-Plato-Word-Box-Solver/blob/main/README_assets/incomplete_grid_3.png)
-
 - **Platform Constraints**: Currently Windows-only due to screen capture dependencies
 - Limited to the English word dictionary only
-- Inefficient OCR Processing speed
+- ~~**Unable to reliably detect some letters (most especially I and J). in some instances**~~ (solved) 
+- ~~**Inefficient OCR Processing speed**~~  (solved)
 
 [back to top](#table-of-contents)
 
 ## Future Directions
-- Fine tune an existing deep learning image classification model to improve accuracy of the application. 
+- Expand language support beyond English
+- Explore mobile deployment or cross-platform compatibility
 
 [back to top](#table-of-contents)
 
