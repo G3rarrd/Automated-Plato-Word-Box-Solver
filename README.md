@@ -6,7 +6,7 @@ This project is an automated OCR solution for solving the Word Box mini-game in 
 ### Old
 ![demo](https://github.com/G3rarrd/Automated-Plato-Word-Box-Solver/blob/main/README_assets/Word-Box_Solver_Demo.gif)
 ### New 
-![demo](https://github.com/G3rarrd/Automated-Plato-Word-Box-Solver/blob/main/README_assets/word_box_solver_demo_5x5_grid_edit_1.gif)
+![demo](https://github.com/G3rarrd/Automated-Plato-Word-Box-Solver/blob/main/README_assets/word_box_solver_demo_5x5_grid_edit.gif)
 
 ## New Features
 - Replaced EasyOCR with a custom-CNN model trained and validated on a cleaned char74k dataset for letter detection
