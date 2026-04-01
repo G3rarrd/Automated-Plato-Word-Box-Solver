@@ -6,6 +6,7 @@ from random import uniform
 import time
 import pyautogui
 from pynput import keyboard
+import math
 
 
 
@@ -114,11 +115,21 @@ class AppController:
         listener.start()
         
         self.app.is_solving = True # State of the solving process
+
+        def total_path_distance(path : list[list[int]]):
+            total = 0.0
+            for i in range(len(path) - 1):
+                x1, y1 = path[i]
+                x2, y2 = path[i + 1]
+                total += math.hypot(x1 - x2, y1 - y2)
+            return total
+
         
         # Sort the longest words from begining to the end
-        sorted_items = sorted(self.solver.found_words.items(), key=lambda x: len(x[0][0]), reverse=True)
         
-        for (_, _), path in sorted_items:
+        sorted_words_by_distance = sorted(self.solver.found_words.items(), key=lambda x: total_path_distance(x[1]), reverse=True)
+        
+        for (_, _), path in sorted_words_by_distance:
             if not self.app.is_solving:
                 self.app.is_paused = False
                 break

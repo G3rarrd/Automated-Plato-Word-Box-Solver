@@ -112,7 +112,7 @@ class WordBoxSolver:
         char : str = grid[row][col]
         index : int = ord(char[0]) - ord("a")
         
-        
+
         if (not node or not node.children[index] or node.children[index].count == 0): return
         
         # Move to the next node in the trie
